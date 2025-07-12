@@ -35,6 +35,7 @@
 #define ESC_ARG_SIZ   16
 #define STR_BUF_SIZ   ESC_BUF_SIZ
 #define STR_ARG_SIZ   ESC_ARG_SIZ
+#define HISTSIZE      20000
 
 /* macros */
 #define IS_SET(flag)		((term.mode & (flag)) != 0)
@@ -46,6 +47,9 @@
 #define TSCREEN term.screen[IS_SET(MODE_ALTSCREEN)]
 #define TLINEOFFSET(y) (((y) + TSCREEN.cur - TSCREEN.off + TSCREEN.size) % TSCREEN.size)
 #define TLINE(y) (TSCREEN.buffer[TLINEOFFSET(y)])
+
+// from @LukeSmithxyz
+#define TLINE_HIST(y)           TLINE(y)
 
 enum term_mode {
 	MODE_WRAP        = 1 << 0,
@@ -1095,7 +1099,7 @@ kscrollup(const Arg *a)
 	if (IS_SET(MODE_ALTSCREEN))
 		return;
 
-	if (n < 0) n = (-n) * term.row;
+	if (n < 0) n = (-n) * term.row / 2;
 	if (n > TSCREEN.size - term.row - TSCREEN.off) n = TSCREEN.size - term.row - TSCREEN.off;
 	while (!TLINE(-n)) --n;
 	TSCREEN.off += n;
@@ -2127,6 +2131,93 @@ sendbreak(const Arg *arg)
 {
 	if (tcsendbreak(cmdfd, 0))
 		perror("Error sending break");
+}
+
+// from @LukeSmithxyz - fixed for ringbuffer scrollback
+int
+tlinehistlen(int y)
+{
+	int i = term.col;
+	
+	if (y >= term.row)
+		return 0;
+
+	if (TLINE(y)[i - 1].mode & ATTR_WRAP)
+		return i;
+
+	while (i > 0 && TLINE(y)[i - 1].u == ' ')
+		--i;
+
+	return i;
+}
+
+// from @LukeSmithxyz - simplified version for ringbuffer scrollback
+void
+externalpipe(const Arg *arg)
+{
+	int to[2];
+	char buf[UTF_SIZ];
+	void (*oldsigpipe)(int);
+	Glyph *bp, *end;
+	int lastpos, n, newline;
+
+	if (pipe(to) == -1)
+		return;
+
+	switch (fork()) {
+	case -1:
+		close(to[0]);
+		close(to[1]);
+		return;
+	case 0:
+		dup2(to[0], STDIN_FILENO);
+		close(to[0]);
+		close(to[1]);
+		execvp(((char **)arg->v)[0], (char **)arg->v);
+		fprintf(stderr, "st: execvp %s\n", ((char **)arg->v)[0]);
+		perror("failed");
+		exit(0);
+	}
+
+	close(to[0]);
+	/* ignore sigpipe for now, in case child exists early */
+	oldsigpipe = signal(SIGPIPE, SIG_IGN);
+	newline = 0;
+	
+	/* pipe all history from ring buffer */
+	for (n = -TSCREEN.size + term.row; n < term.row; n++) {
+		bp = TLINE(n);
+		if (!bp) continue; /* skip empty lines in ring buffer */
+		/* find last non-space character */
+		lastpos = term.col - 1;
+		while (lastpos >= 0 && bp[lastpos].u == ' ')
+			lastpos--;
+			
+		if (lastpos < 0) {
+			/* empty line */
+			if (xwrite(to[1], "\n", 1) < 0)
+				break;
+			continue;
+		}
+		
+		/* write line content */
+		end = &bp[lastpos + 1];
+		for (; bp < end; ++bp) {
+			if (xwrite(to[1], buf, utf8encode(bp->u, buf)) < 0)
+				goto cleanup;
+		}
+		
+		/* add newline unless line wraps */
+		if (!(TLINE(n)[lastpos].mode & ATTR_WRAP)) {
+			if (xwrite(to[1], "\n", 1) < 0)
+				break;
+		}
+	}
+
+cleanup:
+	close(to[1]);
+	/* restore */
+	signal(SIGPIPE, oldsigpipe);
 }
 
 void

@@ -1,0 +1,94 @@
+#!/bin/sh
+# Fixed version with debug output
+tmpfile=$(mktemp /tmp/st-cmd-output.XXXXXX)
+cleanfile=$(mktemp /tmp/st-clean-output.XXXXXX)
+trap 'rm -f "$tmpfile" "$cleanfile"' 0 1 15
+
+# Save input
+cat > "$tmpfile"
+
+# Create clean version
+sed 's/\x1b\[[0-9;]*m//g' "$tmpfile" | tr -d '\0' > "$cleanfile"
+
+# cp "$tmpfile" /tmp/st-out_debug.log
+# cp "$cleanfile" /tmp/st-clean_debug.log
+
+# echo "=== DEBUG: Finding commands ===" > /tmp/st-copyout-debug.log
+# Find all command lines
+cmd_lines=$(grep -n -E '^\s+.*\s+±.*[a-zA-Z0-9_-]+' "$cleanfile")
+# echo "Found command lines:" >> /tmp/st-copyout-debug.log
+# echo "$cmd_lines" >> /tmp/st-copyout-debug.log
+
+if [ -z "$cmd_lines" ]; then
+    echo "No commands found, copying all" | dmenu -p "Info" -l 1 > /dev/null
+    cat "$tmpfile" | xclip -selection clipboard
+    exit 0
+fi
+
+# Create dmenu options with line numbers
+# echo "=== Creating dmenu options ===" >> /tmp/st-copyout-debug.log
+dmenu_options=""
+echo "$cmd_lines" | while IFS=: read -r line_num full_line; do
+    # Extract command after ±
+    cmd=$(echo "$full_line" | sed 's/^.*±[[:space:]]*//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    
+    echo "Line $line_num: '$full_line' -> '$cmd'" >> /tmp/st-copyout-debug.log
+    
+    if [ -n "$cmd" ]; then
+        if [ -z "$dmenu_options" ]; then
+            dmenu_options="$line_num:$cmd"
+        else
+            dmenu_options="$dmenu_options
+$line_num:$cmd"
+        fi
+    fi
+done
+
+# echo "=== Final dmenu options ===" >> /tmp/st-copyout-debug.log
+# echo "$dmenu_options" >> /tmp/st-copyout-debug.log
+
+# Use a temporary file to store dmenu options
+echo "$cmd_lines" | while IFS=: read -r line_num full_line; do
+    cmd=$(echo "$full_line" | sed 's/^.*±[[:space:]]*//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if [ -n "$cmd" ]; then
+        echo "$line_num:$cmd"
+    fi
+done > /tmp/dmenu_opts
+
+# Show dmenu
+chosen=$(cut -d: -f2- /tmp/dmenu_opts | dmenu -p "Copy which command's output?" -i -l 10)
+
+# echo "=== User chose: '$chosen' ===" >> /tmp/st-copyout-debug.log
+
+if [ -z "$chosen" ]; then
+    exit 0
+fi
+
+# Find line number
+line_num=$(grep ":$chosen$" /tmp/dmenu_opts | cut -d: -f1)
+# echo "=== Found line number: '$line_num' ===" >> /tmp/st-copyout-debug.log
+
+if [ -z "$line_num" ]; then
+    echo "Could not find line number!" >> /tmp/st-copyout-debug.log
+    exit 0
+fi
+
+# Find next command
+next_line=$(awk -v start="$line_num" 'NR > start && /^\s+.*\s+±.*[a-zA-Z0-9_-]+/ { print NR; exit }' "$cleanfile")
+# echo "=== Next command line: '$next_line' ===" >> /tmp/st-copyout-debug.log
+
+# Copy content
+if [ -n "$next_line" ]; then
+    # echo "=== Copying lines $line_num to $((next_line-1)) ===" >> /tmp/st-copyout-debug.log
+    sed -n "${line_num},$((next_line-1))p" "$tmpfile" | xclip -selection clipboard
+    copied_lines=$(sed -n "${line_num},$((next_line-1))p" "$tmpfile" | wc -l)
+else
+    # echo "=== Copying lines $line_num to end ===" >> /tmp/st-copyout-debug.log
+    sed -n "${line_num},\$p" "$tmpfile" | xclip -selection clipboard
+    copied_lines=$(sed -n "${line_num},\$p" "$tmpfile" | wc -l)
+fi
+
+# echo "=== Copied $copied_lines lines ===" >> /tmp/st-copyout-debug.log
+
+# Clean up
+rm -f /tmp/dmenu_opts

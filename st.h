@@ -19,7 +19,7 @@
 
 #define TRUECOLOR(r,g,b)	(1 << 24 | (r) << 16 | (g) << 8 | (b))
 #define IS_TRUECOL(x)		(1 << 24 & (x))
-#define HISTSIZE            2000
+#define HISTSIZE            20000
 
 enum glyph_attribute {
 	ATTR_NULL       = 0,
@@ -114,6 +114,9 @@ size_t utf8encode(Rune, char *);
 void *xmalloc(size_t);
 void *xrealloc(void *, size_t);
 char *xstrdup(const char *);
+
+// from @LukeSmithxyz
+void externalpipe(const Arg *);
 
 /* config.h globals */
 extern char *utmp;
