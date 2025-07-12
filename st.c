@@ -2834,6 +2834,13 @@ copyurl(const Arg *arg) {
 	const char *c = NULL,
 		 *match = NULL;
 
+	/* Safety check: ensure terminal is properly initialized */
+	if (term.row <= 0 || term.col <= 0)
+		return;
+	
+	/* fprintf(stderr, "copyurl: called with arg->i=%d, term.row=%d, term.col=%d\n", 
+	        arg->i, term.row, term.col); */
+
 	row = (sel.ob.x >= 0 && sel.nb.y > 0) ? sel.nb.y : term.bot;
 	LIMIT(row, term.top, term.bot);
 
@@ -2845,17 +2852,28 @@ copyurl(const Arg *arg) {
 	** next occurrance of a URL
 	*/
 	for (passes = 0; passes < term.row; passes++) {
+		/* Safety check: ensure row is valid and line exists */
+		if (row < 0 || row >= term.row)
+			goto next_row;
+
 		/* Read in each column of every row until
 		** we hit previous occurrence of URL
 		*/
+		Line line = TLINE(row);
+		if (!line)
+			goto next_row;
+			
 		for (col = 0; col < colend; ++col)
-			linestr[col] = term.line[row][col].u < 128 ? term.line[row][col].u : ' ';
+			linestr[col] = line[col].u < 128 ? line[col].u : ' ';
 		linestr[col] = '\0';
+
+		/* fprintf(stderr, "copyurl: checking row %d: \"%s\"\n", row, linestr); */
 
 		if ((match = findlastany(linestr, URLSTRINGS,
 						sizeof(URLSTRINGS)/sizeof(URLSTRINGS[0]))))
 			break;
 
+next_row:
         /* .i = 0 --> botton-up
          * .i = 1 --> top-down
          * */
