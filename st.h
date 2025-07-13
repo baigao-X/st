@@ -35,6 +35,7 @@ enum glyph_attribute {
 	ATTR_WIDE       = 1 << 9,
 	ATTR_WDUMMY     = 1 << 10,
 	ATTR_SELECTED   = 1 << 11,
+	ATTR_HIGHLIGHT  = 1 << 12,
 	ATTR_BOLD_FAINT = ATTR_BOLD | ATTR_FAINT,
 };
 
@@ -108,6 +109,12 @@ void selstart(int, int, int);
 void selextend(int, int, int, int);
 int selected(int, int);
 char *getsel(void);
+
+void selectmode_enter(void);
+void selectmode_exit(void);
+int isselectmode(void);
+int gethighlightrow(void);
+void resethighlightoncursor(void);
 
 size_t utf8encode(Rune, char *);
 

@@ -229,6 +229,9 @@ static Line ensureline(Line);
 static void selnormalize(void);
 static void selscroll(int, int);
 static void selsnap(int *, int *, int);
+static void selectmode_scroll(int);
+static void sethighlight(int);
+static void clearhighlight(void);
 
 static size_t utf8decode(const char *, Rune *, size_t);
 static Rune utf8decodebyte(char, size_t *);
@@ -246,6 +249,9 @@ static Selection sel;
 static CSIEscape csiescseq;
 static STREscape strescseq;
 static int iofd = 1;
+static int selectmode_x = 0;  /* selection mode cursor x */
+static int selectmode_y = 0;  /* selection mode cursor y */
+static int highlight_row = -1; /* current highlighted row (-1 = no highlight) */
 static int cmdfd;
 static pid_t pid;
 
@@ -1099,6 +1105,18 @@ kscrollup(const Arg *a)
 	if (IS_SET(MODE_ALTSCREEN))
 		return;
 
+	if (isselectmode()) {
+		selectmode_scroll(1);
+		return;
+	}
+
+	/* 更新高亮行位置 */
+	if (highlight_row == -1) {
+		highlight_row = term.c.y; /* 初始化为当前光标行 */
+	} else if (highlight_row > 0) {
+		highlight_row--; /* 向上移动高亮行 */
+	}
+
 	if (n < 0) n = (-n) * term.row / 2;
 	if (n > TSCREEN.size - term.row - TSCREEN.off) n = TSCREEN.size - term.row - TSCREEN.off;
 	while (!TLINE(-n)) --n;
@@ -1116,11 +1134,93 @@ kscrolldown(const Arg *a)
 	if (IS_SET(MODE_ALTSCREEN))
 		return;
 
+	if (isselectmode()) {
+		selectmode_scroll(-1);
+		return;
+	}
+
+	/* 更新高亮行位置 */
+	if (highlight_row == -1) {
+		highlight_row = term.c.y; /* 初始化为当前光标行 */
+	} else if (highlight_row < term.c.y) {
+		highlight_row++; /* 向下移动高亮行，但不超过当前光标行 */
+	}
+
 	if (n < 0) n = (-n) * term.row;
 	if (n > TSCREEN.off) n = TSCREEN.off;
 	TSCREEN.off -= n;
 	selscroll(0, -n);
 	tfulldirt();
+}
+
+void
+selectmode_enter(void)
+{
+	if (IS_SET(MODE_ALTSCREEN))
+		return;
+	
+	selectmode_x = 0;
+	selectmode_y = (highlight_row != -1) ? highlight_row : term.c.y;  /* 从当前高亮行或光标行开始 */
+	selstart(selectmode_x, selectmode_y, 0);
+}
+
+void
+selectmode_exit(void)
+{
+	selclear();
+}
+
+void
+selectmode_scroll(int dir)
+{
+	if (!isselectmode())
+		return;
+
+	if (dir > 0) {
+		/* scroll up, extend selection upward */
+		if (selectmode_y > 0) {
+			selectmode_y--;
+			selextend(selectmode_x, selectmode_y, SEL_REGULAR, 0);
+		}
+	} else {
+		/* scroll down, extend selection downward */
+		if (selectmode_y < term.row - 1) {
+			selectmode_y++;
+			selextend(selectmode_x, selectmode_y, SEL_REGULAR, 0);
+		}
+	}
+}
+
+void
+sethighlight(int row)
+{
+	if (row >= 0 && row < term.row) {
+		highlight_row = row;
+		tfulldirt(); /* 重绘屏幕 */
+	}
+}
+
+void
+clearhighlight(void)
+{
+	highlight_row = -1;
+	tfulldirt(); /* 重绘屏幕 */
+}
+
+int
+gethighlightrow(void)
+{
+	return highlight_row;
+}
+
+void
+resethighlightoncursor(void)
+{
+	/* 只在非选择模式下清除高亮，避免影响选择操作 */
+	if (!isselectmode() && highlight_row != -1) {
+		highlight_row = -1; /* 清除高亮 */
+		tfulldirt(); /* 重绘屏幕 */
+	}
 }
 
 void

@@ -56,6 +56,9 @@ static void clipcopy(const Arg *);
 static void clippaste(const Arg *);
 static void numlock(const Arg *);
 static void selpaste(const Arg *);
+void selcopy(const Arg *);
+void toggleselectmode(const Arg *);
+static void updateselecttitle(void);
 static void zoom(const Arg *);
 static void zoomabs(const Arg *);
 static void zoomreset(const Arg *);
@@ -230,6 +233,7 @@ static DC dc;
 static XWindow xw;
 static XSelection xsel;
 static TermWindow win;
+static char *original_title = NULL;
 
 /* Font Ring Cache */
 enum {
@@ -295,6 +299,63 @@ selpaste(const Arg *dummy)
 {
 	XConvertSelection(xw.dpy, XA_PRIMARY, xsel.xtarget, XA_PRIMARY,
 			xw.win, CurrentTime);
+}
+
+void
+selcopy(const Arg *dummy)
+{
+	char *str;
+
+	if ((str = getsel())) {
+		xsetsel(str);
+		xclipcopy();
+	}
+}
+
+int
+isselectmode(void)
+{
+	return IS_SET(MODE_SELECTMODE);
+}
+
+void
+updateselecttitle(void)
+{
+	static char selecttitle[256];
+	static unsigned int original_cursor_color = 0;
+	extern unsigned int defaultcs;
+	
+	if (!original_title) {
+		original_title = strdup(opt_title ? opt_title : "st");
+		original_cursor_color = defaultcs;
+	}
+	
+	if (IS_SET(MODE_SELECTMODE)) {
+		snprintf(selecttitle, sizeof(selecttitle), "[SELECT] %s", original_title);
+		xsettitle(selecttitle);
+		defaultcs = 3; /* 设置为红色，表示选择模式 */
+	} else {
+		xsettitle(original_title);
+		defaultcs = original_cursor_color; /* 恢复原始光标颜色 */
+	}
+}
+
+void
+toggleselectmode(const Arg *dummy)
+{
+	if (IS_SET(MODE_SELECTMODE)) {
+		win.mode &= ~MODE_SELECTMODE;
+		selectmode_exit();
+	} else {
+		win.mode |= MODE_SELECTMODE;
+		selectmode_enter();
+	}
+	updateselecttitle();
+	
+	/* 强制重绘来更新高亮行颜色 */
+	if (gethighlightrow() != -1) {
+		redraw();
+	}
 }
 
 void
@@ -1515,6 +1576,19 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 			fg = &dc.col[selectionfg];
 	}
 
+	if (base.mode & ATTR_HIGHLIGHT) {
+		extern unsigned int highlightbg, highlightfg;
+		extern unsigned int selecthighlightbg, selecthighlightfg;
+		
+		if (isselectmode()) {
+			bg = &dc.col[selecthighlightbg];
+			fg = &dc.col[selecthighlightfg];
+		} else {
+			bg = &dc.col[highlightbg];
+			fg = &dc.col[highlightfg];
+		}
+	}
+
 	if (base.mode & ATTR_BLINK && win.mode & MODE_BLINK)
 		fg = bg;
 
@@ -1582,6 +1656,8 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	/* remove the old cursor */
 	if (selected(ox, oy))
 		og.mode |= ATTR_SELECTED;
+	if (gethighlightrow() == oy)
+		og.mode |= ATTR_HIGHLIGHT;
 	xdrawglyph(og, ox, oy);
 
 	if (IS_SET(MODE_HIDE))
@@ -1708,6 +1784,8 @@ xdrawline(Line line, int x1, int y1, int x2)
 			continue;
 		if (selected(x, y1))
 			new.mode |= ATTR_SELECTED;
+		if (gethighlightrow() == y1)
+			new.mode |= ATTR_HIGHLIGHT;
 		if (i > 0 && ATTRCMP(base, new)) {
 			xdrawglyphfontspecs(specs, base, i, ox, y1);
 			specs += i;
@@ -1917,6 +1995,7 @@ kpress(XEvent *ev)
 	/* 2. custom keys from config.h */
 	if ((customkey = kmap(ksym, e->state))) {
 		ttywrite(customkey, strlen(customkey), 1);
+		resethighlightoncursor();
 		return;
 	}
 
@@ -1936,6 +2015,7 @@ kpress(XEvent *ev)
 		}
 	}
 	ttywrite(buf, len, 1);
+	resethighlightoncursor();
 }
 
 void

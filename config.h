@@ -124,6 +124,8 @@ static const char *colorname[] = {
 	"#d8dee9", /* default foreground colour */
 	"#2e3440", /* default background colour */
 	"#0078d4", /* bright blue for selection */
+	"#434c5e", /* normal mode highlight background color */
+	"#bf616a", /* select mode highlight background color (red) */
 };
 
 
@@ -137,6 +139,10 @@ unsigned int defaultcs = 256;
 static unsigned int defaultrcs = 257;
 unsigned int selectionbg = 258;
 unsigned int selectionfg = 7;
+unsigned int highlightbg = 259;  /* 普通模式高亮行背景色 */
+unsigned int highlightfg = 15;   /* 普通模式高亮行前景色 */
+unsigned int selecthighlightbg = 260;  /* 选择模式高亮行背景色 */
+unsigned int selecthighlightfg = 15;   /* 选择模式高亮行前景色 */
 /* If 0 use selectionfg as foreground in order to have a uniform foreground-color */
 /* Else if 1 keep original foreground-color of each cell => more colors :) */
 static int ignoreselfg = 1;
@@ -209,7 +215,7 @@ static char *copyoutput[] = { "/bin/sh", "-c", "st-copyout", "externalpipe", NUL
 static Shortcut shortcuts[] = {
 	/* mask                 keysym          function        argument */
 	{ MODKEY|ControlMask,   XK_l,           externalpipe,   {.v = openurlcmd } },
-	{ MODKEY,               XK_y,           externalpipe,   {.v = copyurlcmd } },
+	{ MODKEY,               XK_c,           externalpipe,   {.v = copyurlcmd } },
 	{ MODKEY,               XK_o,           externalpipe,   {.v = copyoutput } },
 	{ XK_ANY_MOD,           XK_Break,       sendbreak,      {.i =  0} },
 	{ ControlMask,          XK_Print,       toggleprinter,  {.i =  0} },
@@ -228,8 +234,11 @@ static Shortcut shortcuts[] = {
     { MODKEY|ShiftMask,     XK_L,           copyurl,        {.i =  1} },
 	{ MODKEY,               XK_k,           kscrollup,      {.i =  1} },  //翻滚一行
 	{ MODKEY,               XK_j,           kscrolldown,    {.i =  1} },  //翻滚一行
-	{ MODKEY|ControlMask,   XK_k,           kscrollup,      {.i = -1} },  //翻滚半页
-	{ MODKEY|ControlMask,   XK_j,           kscrolldown,    {.i = -1} },  //翻滚半页
+	{ MODKEY,               XK_u,           kscrollup,      {.i = -1} },  //翻滚半页
+	{ MODKEY,               XK_d,           kscrolldown,    {.i = -1} },  //翻滚半页
+	{ MODKEY,               XK_v,           toggleselectmode, {.i = 0} }, //进入/退出选择模式
+	{ MODKEY,               XK_y,           selcopy,        {.i =  0} },  //复制选择内容
+	{ MODKEY,               XK_p,           clippaste,      {.i =  0} },
 };
 
 /*
