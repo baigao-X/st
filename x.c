@@ -59,6 +59,8 @@ static void selpaste(const Arg *);
 void selcopy(const Arg *);
 void toggleselectmode(const Arg *);
 static void updateselecttitle(void);
+void kjumptofirst(const Arg *);
+void kjumptolast(const Arg *);
 static void zoom(const Arg *);
 static void zoomabs(const Arg *);
 static void zoomreset(const Arg *);
@@ -356,6 +358,24 @@ toggleselectmode(const Arg *dummy)
 	if (gethighlightrow() != -1) {
 		redraw();
 	}
+}
+
+void
+kjumptofirst(const Arg *dummy)
+{
+	/* 测试1：调用st.c中的jumptofirst */
+	jumptofirst();
+}
+
+void
+kjumptolast(const Arg *dummy)
+{
+	if (IS_SET(MODE_SELECTMODE)) {
+		win.mode &= ~MODE_SELECTMODE;
+		selectmode_exit();
+		updateselecttitle();
+	}
+	jumptolast();
 }
 
 void

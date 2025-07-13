@@ -115,6 +115,8 @@ void selectmode_exit(void);
 int isselectmode(void);
 int gethighlightrow(void);
 void resethighlightoncursor(void);
+void jumptofirst(void);
+void jumptolast(void);
 
 size_t utf8encode(Rune, char *);
 

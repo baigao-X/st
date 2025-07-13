@@ -239,6 +239,8 @@ static Shortcut shortcuts[] = {
 	{ MODKEY,               XK_v,           toggleselectmode, {.i = 0} }, //进入/退出选择模式
 	{ MODKEY,               XK_y,           selcopy,        {.i =  0} },  //复制选择内容
 	{ MODKEY,               XK_p,           clippaste,      {.i =  0} },
+	{ MODKEY,               XK_g,           kjumptofirst,   {.i =  0} },  //跳转到第一行
+	{ MODKEY|ShiftMask,     XK_G,           kjumptolast,    {.i =  0} },  //跳转到最后一行
 };
 
 /*

@@ -1224,6 +1224,31 @@ resethighlightoncursor(void)
 }
 
 void
+jumptofirst(void)
+{
+	/* 跳转到第一行 - 模拟大量向上滚动 */
+	if (IS_SET(MODE_ALTSCREEN))
+		return;
+	
+	/* 使用一个大的滚动值滚动到顶部 */
+	Arg scrollarg = {.i = HISTSIZE};
+	kscrollup(&scrollarg);
+	highlight_row = 0;
+}
+
+void
+jumptolast(void)
+{
+	/* G键功能：跳转到最后 */
+	if (IS_SET(MODE_ALTSCREEN))
+		return;
+	
+	TSCREEN.off = 0;
+	highlight_row = term.c.y;
+	tfulldirt();
+}
+
+void
 tscrolldown(int orig, int n)
 {
 	int i;
